@@ -1,0 +1,56 @@
+#!/bin/sh
+set -e
+set -x
+DEFAULT_ENTRYPOINTS="  --entrypoint entrypoint.mainnet-beta.solana.com:8001  --entrypoint entrypoint2.mainnet-beta.solana.com:8001  --entrypoint entrypoint3.mainnet-beta.solana.com:8001  --entrypoint entrypoint4.mainnet-beta.solana.com:8001  --entrypoint entrypoint5.mainnet-beta.solana.com:8001 "
+DEFAULT_TRUSTED_VALIDATORS="--trusted-validator 5D1fNXzvv5NjV1ysLjirC4WY92RNsVH18vjmcszZd8on --trusted-validator 7XSY3MrYnK8vq693Rju17bbPkCN3Z7KvvfvJx4kdrsSY --trusted-validator Ft5fbkqNa76vnsjYNwjDZUXoTWpP7VYm3mtsaQckQADN --trusted-validator 9QxCLckBiJc783jnMvXZubK4wH86Eqqvashtrwvcsgkv"                                                                                                                                                                                    LEDGER_PATH="{{ ansible_facts['env']['HOME'] }}/validator-ledger"                                                                                           SOLANA_FILES_DIR=`dirname "$LEDGER_PATH"`                                                                                                                   SLOT=131973970                                                                                                                                              EXPECTED_SNAPSHOT_HASH="AnEZqgeVkxFDJzj1aYP3mb9siAWWRLtmx4qXyG3T5rTh"                                                                                       EXPECTED_SHRED_VERSION="3247"                                                                                                                               EXPECTED_BANK_HASH="DYR7fU4vw1Wk2FUwAgbnFFxwYE4ZcNx6W796ky2ayNHU"                                                                                           EXPECTED_FILE="snapshot-$SLOT-${EXPECTED_SNAPSHOT_HASH}.tar.zst"                                                                                            LOG=`mktemp`                                                                                                                                                
+
+ENTRYPOINTS="$DEFAULT_ENTRYPOINTS"
+KNOWN_VALIDATORS="--known-validator Cogent51kHgGLHr7zpkpRjGYFXM57LgjHjDdqXd4ypdA --known-validator 12ashmTiFStQ8RGUpi1BTCinJakVyDKWjRL6SWhnbxbT --known-validator 1aine15iEqZxYySNwcHtQFt4Sgc75cbEi9wks8YgNCa --known-validator FXrzBb4KBTiQsVdSprYtKE4nZUvQWc7rgG5Z2BF9mUXd"                                                 
+LEDGER_PATH="{{ ansible_facts['env']['HOME'] }}/validator-ledger"                                                                                           
+SOLANA_FILES_DIR=`dirname "$LEDGER_PATH"`                                                                                                                   
+SLOT=131973970                                                                                                                                              
+EXPECTED_SNAPSHOT_HASH="AnEZqgeVkxFDJzj1aYP3mb9siAWWRLtmx4qXyG3T5rTh"                                                                                       
+EXPECTED_SHRED_VERSION="3247"                                                                                                                               
+EXPECTED_BANK_HASH="DYR7fU4vw1Wk2FUwAgbnFFxwYE4ZcNx6W796ky2ayNHU"                                                                                           
+EXPECTED_FILE="snapshot-$SLOT-${EXPECTED_SNAPSHOT_HASH}.tar.zst"                                                                                            
+LOG=`mktemp`                                                                                                                                                
+# LOG="/tmp/tmp.ppg61cUDMO"
+# trap "{ echo rm $LOG; }" EXIT
+
+sudo systemctl stop solana
+pkill -15 -f solana-validator || true
+sleep 5
+pkill -9  -f solana-validator || true
+
+echo "Log is saved to $LOG"
+
+NO_FETCH_ARG="--no-snapshot-fetch"
+
+rm -rf ~/validator-ledger
+cd ~/validator-ledger
+wget https://shdw-drive.genesysgo.net/solana/snapshot-131973970-AnEZqgeVkxFDJzj1aYP3mb9siAWWRLtmx4qXyG3T5rTh.tar.zst
+cd -
+
+rm -rf "$HOME/solana-temp.log" solana.log
+nohup ~/.local/share/solana/install/active_release/bin/solana-validator   \
+    --wait-for-supermajority $SLOT                                  \
+    $NO_FETCH_ARG                                                         \
+    --expected-bank-hash ${EXPECTED_BANK_HASH}                            \
+    --expected-shred-version ${EXPECTED_SHRED_VERSION}                    \
+    $ENTRYPOINTS                                                          \
+    $KNOWN_VALIDATORS                                                     \
+    --identity $SOLANA_FILES_DIR/validator-keypair.json                   \
+    --vote-account $SOLANA_FILES_DIR/vote-account-keypair.json            \
+    --ledger $LEDGER_PATH                                                 \
+    --rpc-bind-address 127.0.0.1                                          \
+    --rpc-port 8899                                                       \
+    --no-port-check                                                       \
+    --no-untrusted-rpc                                                    \
+    --expected-genesis-hash 5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d  \
+    --wal-recovery-mode skip_any_corrupted_record                         \
+    --dynamic-port-range 8000-8020                                        \
+    --limit-ledger-size 50000000                                          \
+    --snapshot-compression none                                           \
+    --snapshot-interval-slots 500                                         \
+    --maximum-local-snapshot-age 500                                      \
+    --log "$HOME/solana-temp.log" &
